@@ -1,0 +1,1 @@
+emergency_type_encoded,total_people,cooking_available,children,elderly,pregnant,days_required,pet_count,dog_count,cat_count
