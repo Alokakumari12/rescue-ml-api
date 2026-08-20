@@ -457,8 +457,9 @@ def server_error(e):
     return jsonify({'error': 'Internal server error'}), 500
 
 # ============================================
-# MAIN
+# MAIN - FIXED PORT FOR RENDER
 # ============================================
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
+    # Render sets the PORT environment variable to 10000 by default
+    port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port, debug=False)
