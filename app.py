@@ -258,11 +258,16 @@ def _predict_payload(data, use_ml: bool):
             if amount:
                 human[name] = format_item(name, amount, spec["unit"], {"cooking": spec["needs_cooking"]})
         pets = {}
-        for name, raw in zip(PET_TARGETS, pet_raw):
-            spec = PET_FOOD[name]
-            amount = round_amount(raw, spec["unit"])
-            if amount:
-                pets[name] = format_item(name, amount, spec["unit"], {"for": spec["for"]})
+        if pet_stats["pet_count"] > 0:
+            for name, raw in zip(PET_TARGETS, pet_raw):
+                spec = PET_FOOD[name]
+                if spec["for"] == "dog" and pet_stats["dog_count"] == 0:
+                    continue
+                if spec["for"] == "cat" and pet_stats["cat_count"] == 0:
+                    continue
+                amount = round_amount(raw, spec["unit"])
+                if amount:
+                    pets[name] = format_item(name, amount, spec["unit"], {"for": spec["for"]})
     else:
         source = "Rule-based fallback"
         human, pets = rule_based(
