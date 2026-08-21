@@ -7,10 +7,12 @@ import os
 import json
 import logging
 import traceback
+import sys
 
 app = Flask(__name__)
 CORS(app)
 
+# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -34,18 +36,27 @@ MODEL_MAPPING = {
 }
 
 def load_models():
-    """Load models from local files"""
+    """Load models from local files with detailed error handling"""
     global models, label_encoder, feature_names, is_ready
     
     logger.info("🔄 Loading models from local files...")
+    logger.info(f"Current working directory: {os.getcwd()}")
+    logger.info(f"Files in models directory: {os.listdir('models') if os.path.exists('models') else 'models folder not found'}")
     
     try:
         # Load label encoder
-        if os.path.exists('models/label_encoder.pkl'):
-            label_encoder = joblib.load('models/label_encoder.pkl')
-            logger.info("✅ Label encoder loaded")
+        encoder_path = 'models/label_encoder.pkl'
+        if os.path.exists(encoder_path):
+            try:
+                label_encoder = joblib.load(encoder_path)
+                logger.info("✅ Label encoder loaded successfully")
+                logger.info(f"Label encoder classes: {label_encoder.classes_}")
+            except Exception as e:
+                logger.error(f"❌ Failed to load label_encoder: {e}")
+                logger.error(traceback.format_exc())
+                return
         else:
-            logger.error("❌ label_encoder.pkl not found")
+            logger.error(f"❌ label_encoder.pkl not found at {encoder_path}")
             return
         
         # Load feature names
@@ -64,24 +75,24 @@ def load_models():
             file_path = f'models/{model_file}'
             if os.path.exists(file_path):
                 try:
+                    logger.info(f"📥 Loading {model_file}...")
                     models[target] = joblib.load(file_path)
                     logger.info(f"  ✅ Loaded: {target} (from {model_file})")
                     loaded_count += 1
                 except Exception as e:
                     logger.error(f"  ❌ Error loading {model_file}: {e}")
+                    logger.error(traceback.format_exc())
             else:
                 logger.warning(f"  ⚠️ File not found: {model_file}")
         
         is_ready = loaded_count > 0
         logger.info(f"📊 Models loaded: {loaded_count}/{len(MODEL_MAPPING)}")
+        logger.info(f"Ready status: {is_ready}")
         
     except Exception as e:
         logger.error(f"❌ Failed to load models: {e}")
-        traceback.print_exc()
+        logger.error(traceback.format_exc())
         is_ready = False
-
-# Load models on startup
-load_models()
 
 @app.route('/health', methods=['GET'])
 def health():
@@ -90,7 +101,19 @@ def health():
         'status': 'healthy' if is_ready else 'loading',
         'models_loaded': len(models),
         'total_models': len(MODEL_MAPPING),
-        'is_ready': is_ready
+        'is_ready': is_ready,
+        'python_version': sys.version,
+        'numpy_version': np.__version__
+    })
+
+@app.route('/', methods=['GET'])
+def root():
+    """Root endpoint for Render health checks"""
+    return jsonify({
+        'status': 'running',
+        'service': 'RescueNet ML API',
+        'health': '/health',
+        'predict': '/predict'
     })
 
 @app.route('/predict', methods=['POST'])
@@ -99,11 +122,18 @@ def predict():
     if not is_ready:
         return jsonify({
             'success': False,
-            'error': 'Models not ready. Please try again.'
+            'error': 'Models not ready. Please try again.',
+            'status': 'loading'
         }), 503
     
     try:
         data = request.json
+        
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'No JSON data provided'
+            }), 400
         
         emergency_type = data.get('emergency_type', 'Flood')
         total_people = int(data.get('total_people', 1))
@@ -113,10 +143,12 @@ def predict():
         pregnant = int(data.get('pregnant', 0))
         
         logger.info(f"📊 Prediction request: {emergency_type}, {total_people} people")
+        logger.info(f"   cooking: {cooking_available}, children: {children}, elderly: {elderly}, pregnant: {pregnant}")
         
         # Encode emergency type
         try:
             encoded_type = label_encoder.transform([emergency_type])[0]
+            logger.info(f"   Encoded emergency type: {encoded_type}")
         except Exception as e:
             logger.warning(f"⚠️ Emergency type '{emergency_type}' not in training, using Flood")
             encoded_type = label_encoder.transform(['Flood'])[0]
@@ -131,6 +163,8 @@ def predict():
             'pregnant': pregnant
         }])
         
+        logger.info(f"   Feature vector: {test_df.iloc[0].to_dict()}")
+        
         # Make predictions using all loaded models
         predictions = {}
         for target, model in models.items():
@@ -143,6 +177,7 @@ def predict():
                 predictions[target] = 0.0
         
         logger.info(f"✅ Prediction successful for emergency: {emergency_type}")
+        logger.info(f"   Predictions: {predictions}")
         
         return jsonify({
             'success': True,
@@ -161,12 +196,30 @@ def predict():
         
     except Exception as e:
         logger.error(f"❌ Prediction error: {e}")
-        traceback.print_exc()
+        logger.error(traceback.format_exc())
         return jsonify({
             'success': False,
             'error': str(e)
         }), 400
 
+@app.route('/debug', methods=['GET'])
+def debug():
+    """Debug endpoint to check model loading"""
+    return jsonify({
+        'is_ready': is_ready,
+        'models_loaded': list(models.keys()),
+        'models_count': len(models),
+        'total_models': len(MODEL_MAPPING),
+        'feature_names': feature_names,
+        'label_encoder_classes': label_encoder.classes_.tolist() if label_encoder else None,
+        'cwd': os.getcwd(),
+        'models_dir_exists': os.path.exists('models'),
+        'models_dir_files': os.listdir('models') if os.path.exists('models') else []
+    })
+
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
+    # Load models before starting server
+    load_models()
+    port = int(os.environ.get('PORT', 10000))
+    logger.info(f"🚀 Starting server on port {port}")
     app.run(host='0.0.0.0', port=port, debug=False)
