@@ -1,0 +1,188 @@
+{
+  "human": {
+    "Rice": {
+      "unit": "kg",
+      "needs_cooking": true
+    },
+    "Dhal (lentils)": {
+      "unit": "kg",
+      "needs_cooking": true
+    },
+    "Cooking oil": {
+      "unit": "L",
+      "needs_cooking": true
+    },
+    "Salt": {
+      "unit": "kg",
+      "needs_cooking": true
+    },
+    "Sugar": {
+      "unit": "kg",
+      "needs_cooking": true
+    },
+    "Biscuits": {
+      "unit": "packets",
+      "needs_cooking": false
+    },
+    "Canned Tuna": {
+      "unit": "cans",
+      "needs_cooking": false
+    },
+    "Water": {
+      "unit": "L",
+      "needs_cooking": false
+    },
+    "Milk powder": {
+      "unit": "kg",
+      "needs_cooking": false
+    },
+    "Potatoes": {
+      "unit": "kg",
+      "needs_cooking": true
+    },
+    "Carrots": {
+      "unit": "kg",
+      "needs_cooking": true
+    },
+    "Cabbage": {
+      "unit": "kg",
+      "needs_cooking": true
+    },
+    "Pumpkin": {
+      "unit": "kg",
+      "needs_cooking": true
+    },
+    "Brinjal": {
+      "unit": "kg",
+      "needs_cooking": true
+    },
+    "Coconut": {
+      "unit": "kg",
+      "needs_cooking": true
+    },
+    "Bread": {
+      "unit": "kg",
+      "needs_cooking": false
+    },
+    "Noodles": {
+      "unit": "packets",
+      "needs_cooking": false
+    },
+    "Sandwiches": {
+      "unit": "packets",
+      "needs_cooking": false
+    },
+    "Boiled eggs": {
+      "unit": "packets",
+      "needs_cooking": false
+    },
+    "Soup": {
+      "unit": "packets",
+      "needs_cooking": false
+    },
+    "Rice and vegetable curry": {
+      "unit": "packets",
+      "needs_cooking": false
+    },
+    "Rice and chicken curry": {
+      "unit": "packets",
+      "needs_cooking": false
+    },
+    "Rice and canned fish": {
+      "unit": "packets",
+      "needs_cooking": false
+    },
+    "Vegetable fried rice": {
+      "unit": "packets",
+      "needs_cooking": false
+    },
+    "String hoppers with curry": {
+      "unit": "packets",
+      "needs_cooking": false
+    },
+    "Roti with curry": {
+      "unit": "packets",
+      "needs_cooking": false
+    },
+    "Paratha with curry": {
+      "unit": "packets",
+      "needs_cooking": false
+    }
+  },
+  "pets": {
+    "Dog Food": {
+      "unit": "kg",
+      "for": "dog"
+    },
+    "Dog Treats": {
+      "unit": "packets",
+      "for": "dog"
+    },
+    "Dog Biscuits": {
+      "unit": "packets",
+      "for": "dog"
+    },
+    "Canned Dog Food": {
+      "unit": "cans",
+      "for": "dog"
+    },
+    "Cat Food": {
+      "unit": "kg",
+      "for": "cat"
+    },
+    "Cat Treats": {
+      "unit": "packets",
+      "for": "cat"
+    },
+    "Canned Cat Food": {
+      "unit": "cans",
+      "for": "cat"
+    },
+    "Cat Kibble": {
+      "unit": "kg",
+      "for": "cat"
+    },
+    "Pet Milk": {
+      "unit": "L",
+      "for": "both"
+    },
+    "Pet Supplements": {
+      "unit": "packets",
+      "for": "both"
+    }
+  },
+  "dog_breeds": [
+    "Labrador Retriever",
+    "German Shepherd",
+    "Golden Retriever",
+    "Bulldog",
+    "Poodle",
+    "Beagle",
+    "Rottweiler",
+    "Dachshund",
+    "Siberian Husky",
+    "Great Dane"
+  ],
+  "cat_breeds": [
+    "Persian",
+    "Siamese",
+    "Maine Coon",
+    "Ragdoll",
+    "Bengal",
+    "Sphynx",
+    "British Shorthair",
+    "Abyssinian",
+    "Scottish Fold",
+    "Oriental Shorthair"
+  ],
+  "emergency_types": [
+    "Flood",
+    "Earthquake",
+    "Tsunami",
+    "Cyclone",
+    "Landslide",
+    "Fire",
+    "Drought",
+    "Epidemic"
+  ]
+}
