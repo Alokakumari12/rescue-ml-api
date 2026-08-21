@@ -41,7 +41,7 @@ PET_FOOD = {
     "Dog Biscuits": {"base": 0.1, "for": "dog", "unit": "packets"},
     "Canned Dog Food": {"base": 0.4, "for": "dog", "unit": "cans"},
     "Cat Food": {"base": 0.15, "for": "cat", "unit": "kg"},
-    "Cat Treats": {"base": 0.03, "for": "cat", "unit": "packets"},
+    "Cat Treats": {"base": 0.08, "for": "cat", "unit": "packets"},
     "Canned Cat Food": {"base": 0.2, "for": "cat", "unit": "cans"},
     "Cat Kibble": {"base": 0.12, "for": "cat", "unit": "kg"},
     "Pet Milk": {"base": 0.1, "for": "both", "unit": "L"},

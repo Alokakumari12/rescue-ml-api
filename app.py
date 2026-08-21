@@ -1,4 +1,4 @@
-"""RescueNet ML API — load two lightweight multi-output models and predict food needs."""
+"""RescueNet ML API — predictions come only from loaded trained models."""
 
 from __future__ import annotations
 
@@ -16,7 +16,6 @@ from flask_cors import CORS
 from food_schema import (
     CAT_BREEDS,
     DOG_BREEDS,
-    EMERGENCY_MULTIPLIERS,
     EMERGENCY_TYPES,
     FEATURE_COLUMNS,
     HUMAN_FOOD,
@@ -24,7 +23,6 @@ from food_schema import (
     INTEGER_UNITS,
     PET_FOOD,
     PET_TARGETS,
-    cooking_multiplier,
     normalize_pet_type,
     pet_size_load,
     round_amount,
@@ -54,8 +52,9 @@ def load_models():
         pet_path = os.path.join(MODEL_DIR, "pet_food_model.pkl")
         info_path = os.path.join(MODEL_DIR, "food_info.json")
 
-        if not (os.path.exists(encoder_path) and os.path.exists(human_path) and os.path.exists(pet_path)):
-            logger.error("Model files missing in %s", MODEL_DIR)
+        missing = [p for p in (encoder_path, human_path, pet_path) if not os.path.exists(p)]
+        if missing:
+            logger.error("Model files missing: %s", missing)
             is_ready = False
             return
 
@@ -66,17 +65,17 @@ def load_models():
             with open(info_path, "r", encoding="utf-8") as f:
                 food_info = json.load(f)
         is_ready = True
-        logger.info("Loaded human + pet multi-output models")
+        logger.info("Loaded human + pet multi-output models from %s", MODEL_DIR)
     except Exception as exc:
         logger.error("Failed to load models: %s", exc)
         traceback.print_exc()
         is_ready = False
 
 
-def count_people(person_details, fallback):
-    children = int(fallback.get("children") or 0)
-    elderly = int(fallback.get("elderly") or 0)
-    pregnant = int(fallback.get("pregnant") or 0)
+def count_people(person_details, payload):
+    children = int(payload.get("children") or 0)
+    elderly = int(payload.get("elderly") or 0)
+    pregnant = int(payload.get("pregnant") or 0)
     vegetarian = 0
     diabetes = 0
     bp = 0
@@ -140,13 +139,10 @@ def summarize_pets(pets):
 
 
 def encode_emergency(name: str) -> int:
-    try:
-        return int(label_encoder.transform([name])[0])
-    except Exception:
-        return int(label_encoder.transform(["Flood"])[0])
+    return int(label_encoder.transform([name])[0])
 
 
-def format_item(name, amount, unit, extra=None):
+def format_item(amount, unit, extra=None):
     payload = {
         "amount": amount,
         "unit": unit,
@@ -157,40 +153,6 @@ def format_item(name, amount, unit, extra=None):
     return payload
 
 
-def rule_based(emergency_type, total_people, cooking_available, days, people_stats, pets):
-    from food_schema import age_factor, breed_factor
-
-    multiplier = EMERGENCY_MULTIPLIERS.get(emergency_type, 1.2)
-    n = max(1, total_people)
-    human = {}
-    for food, spec in HUMAN_FOOD.items():
-        amount = spec["base"] * total_people * days * multiplier
-        amount *= cooking_multiplier(spec["needs_cooking"], cooking_available, spec["category"])
-        if food == "Sugar":
-            amount *= 1 - 0.75 * (people_stats["diabetes_count"] / n)
-        if food == "Salt":
-            amount *= 1 - 0.80 * ((people_stats["bp_count"] + people_stats["heart_count"]) / n)
-        amount = round_amount(amount, spec["unit"])
-        if amount:
-            human[food] = format_item(food, amount, spec["unit"], {"cooking": spec["needs_cooking"]})
-
-    pet_out = {}
-    for food, spec in PET_FOOD.items():
-        total = 0.0
-        for pet in pets:
-            pet_type = normalize_pet_type(pet.get("type"))
-            if spec["for"] not in (pet_type, "both"):
-                continue
-            ref = 20.0 if pet_type == "dog" else 5.0
-            weight = max(0.0, float(pet.get("weight") or 0))
-            load = (weight / ref) * breed_factor(pet_type, pet.get("breed")) * age_factor(pet_type, pet.get("age"))
-            total += spec["base"] * load * days * (0.92 + 0.08 * multiplier)
-        amount = round_amount(total, spec["unit"])
-        if amount:
-            pet_out[food] = format_item(food, amount, spec["unit"], {"for": spec["for"]})
-    return human, pet_out
-
-
 load_models()
 
 
@@ -198,18 +160,31 @@ load_models()
 def health():
     return jsonify(
         {
-            "status": "healthy" if is_ready else "loading",
+            "status": "healthy" if is_ready else "models_not_loaded",
             "is_ready": is_ready,
             "models_loaded": 2 if is_ready else 0,
+            "model_files": [
+                "human_food_model.pkl",
+                "pet_food_model.pkl",
+                "label_encoder.pkl",
+            ],
             "human_targets": HUMAN_TARGETS,
             "pet_targets": PET_TARGETS,
         }
-    )
+    ), (200 if is_ready else 503)
 
 
 @app.route("/", methods=["GET"])
 def root():
-    return jsonify({"status": "running", "service": "RescueNet ML API", "version": "3.0"})
+    return jsonify(
+        {
+            "status": "running" if is_ready else "models_not_loaded",
+            "service": "RescueNet ML API",
+            "version": "3.0",
+            "is_ready": is_ready,
+            "predict": "/predict",
+        }
+    )
 
 
 @app.route("/breeds", methods=["GET"])
@@ -217,46 +192,70 @@ def breeds():
     return jsonify({"dog_breeds": DOG_BREEDS, "cat_breeds": CAT_BREEDS, "emergency_types": EMERGENCY_TYPES})
 
 
-def _predict_payload(data, use_ml: bool):
-    emergency_type = data.get("emergency_type", "Flood")
-    if emergency_type not in EMERGENCY_TYPES:
-        emergency_type = "Flood"
-    total_people = int(data.get("total_people") or 1)
-    cooking_available = 1 if data.get("cooking_available", True) else 0
-    days_required = int(data.get("days_required") or 3)
-    person_details = data.get("person_details") or data.get("persons") or []
-    pet_details = data.get("pet_details") or data.get("pets") or []
+@app.route("/predict", methods=["POST"])
+def predict():
+    if not is_ready or human_model is None or pet_model is None or label_encoder is None:
+        return jsonify(
+            {
+                "success": False,
+                "error": "AI models are not loaded. Deploy human_food_model.pkl, pet_food_model.pkl, and label_encoder.pkl in models/.",
+            }
+        ), 503
 
-    people_stats = count_people(person_details, data)
-    pet_stats = summarize_pets(pet_details)
+    try:
+        data = request.get_json(force=True) or {}
+        emergency_type = data.get("emergency_type", "Flood")
+        if emergency_type not in EMERGENCY_TYPES:
+            return jsonify(
+                {"success": False, "error": f"Unknown emergency_type. Use one of: {EMERGENCY_TYPES}"}
+            ), 400
 
-    features = {
-        "emergency_type_encoded": encode_emergency(emergency_type) if label_encoder is not None else 0,
-        "total_people": total_people,
-        "cooking_available": cooking_available,
-        "children": people_stats["children"],
-        "elderly": people_stats["elderly"],
-        "pregnant": people_stats["pregnant"],
-        "vegetarian_count": people_stats["vegetarian_count"],
-        "diabetes_count": people_stats["diabetes_count"],
-        "bp_count": people_stats["bp_count"],
-        "heart_count": people_stats["heart_count"],
-        "lactating_count": people_stats["lactating_count"],
-        "days_required": days_required,
-        **pet_stats,
-    }
-    feature_row = pd.DataFrame([{col: features.get(col, 0) for col in FEATURE_COLUMNS}])
+        total_people = int(data.get("total_people") or 1)
+        cooking_available = 1 if data.get("cooking_available", True) else 0
+        days_required = int(data.get("days_required") or 3)
+        person_details = data.get("person_details") or data.get("persons") or []
+        pet_details = data.get("pet_details") or data.get("pets") or []
 
-    source = "ML Model (HistGradientBoosting)"
-    if use_ml and is_ready:
+        people_stats = count_people(person_details, data)
+        pet_stats = summarize_pets(pet_details)
+
+        try:
+            encoded = encode_emergency(emergency_type)
+        except Exception:
+            return jsonify({"success": False, "error": "Label encoder cannot encode this emergency type. Retrain models."}), 400
+
+        features = {
+            "emergency_type_encoded": encoded,
+            "total_people": total_people,
+            "cooking_available": cooking_available,
+            "children": people_stats["children"],
+            "elderly": people_stats["elderly"],
+            "pregnant": people_stats["pregnant"],
+            "vegetarian_count": people_stats["vegetarian_count"],
+            "diabetes_count": people_stats["diabetes_count"],
+            "bp_count": people_stats["bp_count"],
+            "heart_count": people_stats["heart_count"],
+            "lactating_count": people_stats["lactating_count"],
+            "days_required": days_required,
+            **pet_stats,
+        }
+        feature_row = pd.DataFrame([{col: features.get(col, 0) for col in FEATURE_COLUMNS}])
+
         human_raw = human_model.predict(feature_row)[0]
         pet_raw = pet_model.predict(feature_row)[0]
+
         human = {}
+        water = None
         for name, raw in zip(HUMAN_TARGETS, human_raw):
             spec = HUMAN_FOOD[name]
             amount = round_amount(raw, spec["unit"])
+            item = format_item(amount, spec["unit"], {"cooking": spec["needs_cooking"]})
+            if name == "Water":
+                water = item
+                continue
             if amount:
-                human[name] = format_item(name, amount, spec["unit"], {"cooking": spec["needs_cooking"]})
+                human[name] = item
+
         pets = {}
         if pet_stats["pet_count"] > 0:
             for name, raw in zip(PET_TARGETS, pet_raw):
@@ -267,56 +266,32 @@ def _predict_payload(data, use_ml: bool):
                     continue
                 amount = round_amount(raw, spec["unit"])
                 if amount:
-                    pets[name] = format_item(name, amount, spec["unit"], {"for": spec["for"]})
-    else:
-        source = "Rule-based fallback"
-        human, pets = rule_based(
-            emergency_type,
-            total_people,
-            bool(cooking_available),
-            days_required,
-            people_stats,
-            pet_details if isinstance(pet_details, list) else [],
+                    pets[name] = format_item(amount, spec["unit"], {"for": spec["for"]})
+
+        if water is None:
+            return jsonify({"success": False, "error": "Water target missing from the trained human model."}), 500
+
+        return jsonify(
+            {
+                "success": True,
+                "predictions": {"human": human, "pets": pets, "water": water},
+                "metadata": {
+                    "emergency_type": emergency_type,
+                    "total_people": total_people,
+                    "pet_count": pet_stats["pet_count"],
+                    "dog_count": pet_stats["dog_count"],
+                    "cat_count": pet_stats["cat_count"],
+                    "days_required": days_required,
+                    "cooking_available": bool(cooking_available),
+                    "source": "ML Model (HistGradientBoosting)",
+                    "numpy_version": np.__version__,
+                    "models_used": ["human_food_model.pkl", "pet_food_model.pkl"],
+                },
+            }
         )
-
-    water = human.pop("Water", None)
-    if water is None:
-        water = format_item("Water", round(total_people * 3.0 * days_required, 2), "L")
-
-    return {
-        "success": True,
-        "predictions": {"human": human, "pets": pets, "water": water},
-        "metadata": {
-            "emergency_type": emergency_type,
-            "total_people": total_people,
-            "pet_count": pet_stats["pet_count"],
-            "dog_count": pet_stats["dog_count"],
-            "cat_count": pet_stats["cat_count"],
-            "days_required": days_required,
-            "cooking_available": bool(cooking_available),
-            "source": source,
-            "numpy_version": np.__version__,
-        },
-    }
-
-
-@app.route("/predict", methods=["POST"])
-def predict():
-    try:
-        data = request.get_json(force=True) or {}
-        return jsonify(_predict_payload(data, use_ml=True))
     except Exception as exc:
         logger.error("Predict error: %s", exc)
         traceback.print_exc()
-        return jsonify({"success": False, "error": str(exc)}), 400
-
-
-@app.route("/fallback", methods=["POST"])
-def fallback():
-    try:
-        data = request.get_json(force=True) or {}
-        return jsonify(_predict_payload(data, use_ml=False))
-    except Exception as exc:
         return jsonify({"success": False, "error": str(exc)}), 400
 
 
@@ -335,5 +310,5 @@ def debug():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
-    logger.info("Starting RescueNet ML API on port %s", port)
+    logger.info("Starting RescueNet ML API on port %s ready=%s", port, is_ready)
     app.run(host="0.0.0.0", port=port, debug=False)
