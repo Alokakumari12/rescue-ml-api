@@ -10,7 +10,7 @@ import traceback
 import joblib
 import numpy as np
 import pandas as pd
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
 from food_schema import (
@@ -254,7 +254,13 @@ def predict():
                 water = item
                 continue
             if amount:
-                human[name] = item
+                if cooking_available:
+                    if spec["needs_cooking"] or name in ("Milk powder", "Bread"):
+                        if spec["category"] != "meal":
+                            human[name] = item
+                else:
+                    if not spec["needs_cooking"]:
+                        human[name] = item
 
         pets = {}
         if pet_stats["pet_count"] > 0:
@@ -305,6 +311,31 @@ def debug():
             "pet_targets": PET_TARGETS,
             "food_info_keys": list(food_info.keys()),
         }
+    )
+
+
+@app.route("/auth/callback")
+def auth_callback():
+    """Landing page after Google login / password reset. Opens RescueNet via deep link."""
+    return send_from_directory(os.path.join(BASE_DIR, "static"), "auth_callback.html")
+
+
+@app.route("/.well-known/assetlinks.json")
+def assetlinks():
+    """Lets Android open https://rescue-ml-api.onrender.com/auth/callback inside the app."""
+    return jsonify(
+        [
+            {
+                "relation": ["delegate_permission/common.handle_all_urls"],
+                "target": {
+                    "namespace": "android_app",
+                    "package_name": "com.example.first_project",
+                    "sha256_cert_fingerprints": [
+                        "15:6A:BF:57:56:04:30:C8:2D:71:EA:D9:42:6A:32:A6:6C:C4:CF:E9:D0:0D:0F:E7:19:EE:26:DD:CB:E9:E7:88"
+                    ],
+                },
+            }
+        ]
     )
 
 
