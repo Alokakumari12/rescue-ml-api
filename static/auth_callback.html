@@ -36,27 +36,31 @@
       font-weight: bold;
     }
     p { line-height: 1.45; }
+    .err { color: #b71c1c; font-weight: bold; }
   </style>
 </head>
 <body>
   <div class="card">
     <h1>RescueNet</h1>
-    <p id="status">Opening the RescueNet app so you can finish login or set a new password.</p>
-    <p>If nothing happens, tap the button below. Use this on the phone that has RescueNet installed.</p>
-    <a class="btn" id="open" href="#">Open RescueNet</a>
+    <p id="status">Tap the button to open the RescueNet app and finish login or set a new password. Chrome cannot open the app by itself.</p>
+    <p id="error" class="err" hidden></p>
+    <a class="btn" id="open" href="rescunet://login-callback">Open RescueNet</a>
   </div>
   <script>
-    function appUrl() {
-      var qs = window.location.search || "";
-      var hash = window.location.hash || "";
-      return "rescunet://login-callback" + qs + hash;
+    var qs = window.location.search || "";
+    var hash = window.location.hash || "";
+    var custom = "rescunet://login-callback" + qs + hash;
+    var intent = "intent://login-callback" + qs + hash +
+      "#Intent;scheme=rescunet;package=com.example.first_project;end";
+    var params = new URLSearchParams(qs.replace(/^\?/, ""));
+    var err = params.get("error_description") || params.get("error");
+    if (err) {
+      document.getElementById("error").hidden = false;
+      document.getElementById("error").textContent = err;
     }
-    function go() {
-      var url = appUrl();
-      document.getElementById("open").href = url;
-      window.location.replace(url);
-    }
-    go();
+    var btn = document.getElementById("open");
+    var isAndroid = /android/i.test(navigator.userAgent);
+    btn.href = isAndroid ? intent : custom;
   </script>
 </body>
 </html>
